@@ -1,0 +1,5 @@
+# .env file with all the credentials
+.env
+# venv (not to overcharge the github)
+venv
+tweets.csv
