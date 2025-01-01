@@ -76,7 +76,7 @@ async def main():
                           "content": tweet.text
             }
 
-            with open('../../data/tweets.csv', 'a', newline='') as file:
+            with open('tweets.csv', 'a', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow(tweet_data)
             producer.send(PRODUCER_TOPIC, value=tweet_data)
@@ -86,7 +86,7 @@ async def main():
     print(f'{datetime.now()} -Done ! Got {tweet_count} tweets')
 
 # create a csv:
-with open('../../data/tweets.csv', 'w', newline='') as file:
+with open('tweets.csv', 'w', newline='') as file:
     writer = csv.writer(file)
     writer.writerow(['No.', 'Username', 'Created At', 'Retweets', 'Likes', 'Text'])
 
