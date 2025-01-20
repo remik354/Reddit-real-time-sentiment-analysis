@@ -4,8 +4,6 @@ from kafka import KafkaConsumer
 import json
 import time
 
-# Version to connect to the "real" kafka stream of tweets
-"""
 # Kafka Configuration
 KAFKA_BROKER = "localhost:9092"
 READING_TOPIC = "twitter_data"
@@ -16,10 +14,8 @@ consumer = KafkaConsumer(
     bootstrap_servers=KAFKA_BROKER,
     value_deserializer=lambda v: json.loads(v.decode("utf-8")),
     auto_offset_reset="latest",
+    enable_auto_commit=True
 )
-"""
-
-# Version to  connect to a demo "fake" stream of tweets
 
 # Streamlit Configuration
 st.set_page_config(page_title="Real-Time Tweet Sentiment Dashboard", layout="wide")
@@ -48,54 +44,55 @@ def update_sentiment_counts(sentiment):
         sentiment_counts[sentiment] = 1
 
 
-# Main Streamlit Loop
+# Function to update the Streamlit components
+def update_streamlit_display():
+    # Update table display (limit to 10 recent tweets)
+    with tweet_table_placeholder.container():
+        st.write("**Recent Tweets**")
+        st.table(tweets_data.tail(10))
+
+    # Update sentiment distribution chart
+    with sentiment_chart_placeholder.container():
+        sentiment_df = pd.DataFrame(
+            list(sentiment_counts.items()), columns=["Sentiment", "Count"]
+        )
+        st.write("**Sentiment Distribution**")
+        st.bar_chart(sentiment_df.set_index("Sentiment"))
+
+
+# Main loop: Listen to Kafka messages and update Streamlit display
 st.write("Listening for incoming tweets...")
-try:
-    while True:
-        # Consume messages from Kafka
-        for message in consumer:
-            tweet = message.value
 
-            # Extract relevant fields
-            timestamp = tweet.get("created_at")
-            username = tweet.get("username")
-            content = tweet.get("content")
-            sentiment = tweet.get(
-                "sentiment", "Neutral"
-            )  # Default to Neutral if missing
+# Streamlit's interactive approach to prevent blocking
+for message in consumer:
+    tweet = message.value
 
-            # Update sentiment counts and data
-            update_sentiment_counts(sentiment)
-            tweets_data = pd.concat(
+    # Extract relevant fields
+    timestamp = tweet.get("created_at")
+    username = tweet.get("author_id")  # You can replace this with the actual username if you fetch it
+    content = tweet.get("content")
+    sentiment = tweet.get("sentiment", "Neutral")  # Default to Neutral if missing
+
+    # Update sentiment counts and data
+    update_sentiment_counts(sentiment)
+    tweets_data = pd.concat(
+        [
+            tweets_data,
+            pd.DataFrame.from_records(
                 [
-                    tweets_data,
-                    pd.DataFrame.from_records(
-                        [
-                            {
-                                "Timestamp": timestamp,
-                                "Username": username,
-                                "Content": content,
-                                "Sentiment": sentiment,
-                            }
-                        ]
-                    ),
+                    {
+                        "Timestamp": timestamp,
+                        "Username": username,
+                        "Content": content,
+                        "Sentiment": sentiment,
+                    }
                 ]
-            )
+            ),
+        ]
+    )
 
-            # Update table display (limit to 10 recent tweets)
-            with tweet_table_placeholder.container():
-                st.write("**Recent Tweets**")
-                st.table(tweets_data.tail(10))
+    # Update the Streamlit display
+    update_streamlit_display()
 
-            # Update sentiment distribution chart
-            with sentiment_chart_placeholder.container():
-                sentiment_df = pd.DataFrame(
-                    list(sentiment_counts.items()), columns=["Sentiment", "Count"]
-                )
-                st.write("**Sentiment Distribution**")
-                st.bar_chart(sentiment_df.set_index("Sentiment"))
-
-            # Add a small delay to prevent overloading Streamlit
-            time.sleep(0.5)
-except KeyboardInterrupt:
-    st.write("Stopped listening to tweets.")
+    # Add a small delay to prevent overloading Streamlit
+    time.sleep(0.5)

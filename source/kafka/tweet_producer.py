@@ -28,7 +28,7 @@ producer = KafkaProducer(
 )
 
 # Definition of the query and the number of tweets to get (get rid of this later)
-MINIMUM_TWEETS = 5
+MINIMUM_TWEETS = 10
 QUERY = 'Donald Trump'
 
 # authenticate 
@@ -48,7 +48,7 @@ async def main():
         try:
             if tweets is None:
                 print(f'{datetime.now()} - Getting tweets...')
-                tweets = await client.search_tweet(QUERY, count=1, product='Top')
+                tweets = await client.search_tweet(QUERY, count=5, product='Top')
             else:
                 wait_time = randint(2, 15)
                 print(f'{datetime.now()} - Waiting {wait_time} seconds before fetching more tweets...')
