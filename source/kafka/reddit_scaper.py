@@ -42,7 +42,7 @@ def fetch_comments(subreddit_list):
                 # "id": comment.id,
                 # "name": comment.name,
                 "author": comment.author.name if comment.author else "Deleted",
-                "body": comment.body,
+                "body": comment.body[:300],
                 "subreddit": comment.subreddit.display_name.lower(),
                 # "upvotes": comment.ups,
                 # "downvotes": comment.downs,
@@ -52,7 +52,7 @@ def fetch_comments(subreddit_list):
                 "topic_title": topic_title,  # Subreddit title + Topic title
             }
 
-            print(f'New comment ! {comment_data["author"]} said {comment.body} at {comment_data["created_at"]} on {comment.subreddit.display_name.lower()} subreddit\n')
+            print(f'New comment ! \n{comment_data["created_at"]}: Author - {comment_data["author"]} / Subreddit - {comment.subreddit.display_name.lower()}\n{comment.body}\n')
             producer.send(WRITING_TOPIC, value=comment_data)
 
 
@@ -62,7 +62,7 @@ def main():
             # To get from streamlit
             subreddit_list = ['all']
             fetch_comments(subreddit_list)
-            time.sleep(1)
+            # time.sleep(1)
         except KeyboardInterrupt:
             print("Exit")
             break

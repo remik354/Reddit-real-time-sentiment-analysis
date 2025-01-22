@@ -34,16 +34,15 @@ with col2:
     topic_pie_chart_placeholder = st.empty()
 
 # Initialize data structures
-# TODO: bancher à une vraie db (pour voir l'evolution)
 comments_data = pd.DataFrame(columns=["Timestamp", "Username", "Content", "Category", "Topic Title", "Sentiment Score"])
 
 # Function to update Streamlit components
-def update_streamlit_display():
+def update_streamlit_display(comments_data):
     # Update table display (limit to 10 recent comments)
     with comment_table_placeholder.container():
         st.write("**Recent Comments**")
-        st.table(comments_data.tail(10))
-    
+        st.dataframe(comments_data.tail(10), use_container_width=True)
+
     # Update line chart of sentiment evolution
     if not comments_data.empty:
         with sentiment_chart_placeholder.container():
@@ -54,7 +53,7 @@ def update_streamlit_display():
             
             # Group data by category and timestamp, then calculate the mean sentiment score
             sentiment_avg = (
-                comments_data.groupby([pd.Grouper(key="Timestamp", freq="1min"), "Category"])
+                comments_data.groupby([pd.Grouper(key="Timestamp", freq="10s"), "Category"])
                 .agg({"Sentiment Score": "mean"})
                 .reset_index()
             )
@@ -70,53 +69,50 @@ def update_streamlit_display():
             )
             st.plotly_chart(fig, use_container_width=True)
 
-
-    # Update pie chart of topic proportions
-    if not comments_data.empty:
-        with topic_pie_chart_placeholder.container():
-            st.write("**Topic Category Proportions**")
-            topic_counts = comments_data["Category"].value_counts()
-            fig = px.pie(
-                names=topic_counts.index,
-                values=topic_counts.values,
-                title="Proportion of Topic Categories in Comments"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+    # # Update pie chart of topic proportions
+    # if not comments_data.empty:
+    #     with topic_pie_chart_placeholder.container():
+    #         st.write("**Topic Category Proportions**")
+    #         topic_counts = comments_data["Category"].value_counts()
+    #         fig = px.pie(
+    #             names=topic_counts.index,
+    #             values=topic_counts.values,
+    #             title="Proportion of Topic Categories in Comments"
+    #         )
+    #         st.plotly_chart(fig, use_container_width=True, key="topic_pie_chart_unique")
 
 # Main loop: Listen to Kafka messages and update Streamlit display
 st.write("Listening for incoming comments...")
 
-# Streamlit's interactive approach to prevent blocking
-for message in consumer:
-    comment = message.value
+while True:
+    for message in consumer:
+        comment = message.value
 
-    # Extract relevant fields
-    timestamp = comment.get("created_at")
-    username = comment.get("author")
-    content = comment.get("body")
-    topic = comment.get("topic_title")
-    category = comment.get("category")  # Topic the comment belongs to
-    sentiment = comment.get("sentiment")  # Sentiment score (positive, neutral, negative)
+        # Extract relevant fields
+        timestamp = comment.get("created_at")
+        username = comment.get("author")
+        content = comment.get("body")
+        topic = comment.get("topic_title")
+        category = comment.get("category")  # Topic the comment belongs to
+        sentiment = comment.get("sentiment")  # Sentiment score
 
-    # Convert sentiment to numeric score for visualization
-    sentiment_score = {"Positive": 1, "Neutral": 0, "Negative": -1}.get(sentiment, 0)
+        # Update data
+        new_comment = {
+            "Timestamp": timestamp,
+            "Username": username,
+            "Content": content,
+            "Category": category,
+            "Topic Title": topic,
+            "Sentiment Score": sentiment,
+        }
 
-    # Update data
-    new_comment = {
-        "Timestamp": timestamp,
-        "Username": username,
-        "Content": content,
-        "Category": category,
-        "Topic Title": topic,
-        "Sentiment Score": sentiment_score,
-    }
-    comments_data = pd.concat(
-        [comments_data, pd.DataFrame([new_comment])],
-        ignore_index=True
-    )
+        comments_data = pd.concat(
+            [comments_data, pd.DataFrame([new_comment])],
+            ignore_index=True
+        )
 
-    # Update the Streamlit display
-    update_streamlit_display()
+        # Update the Streamlit display
+        update_streamlit_display(comments_data)
 
-    # Add a small delay to prevent overloading Streamlit
-    time.sleep(0.5)
+        # Add a small delay to prevent overloading Streamlit
+        time.sleep(0.1)
