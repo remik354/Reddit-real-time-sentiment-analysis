@@ -1,4 +1,4 @@
-# Twitter-real-time-sentiment-analysis
+# Reddit-real-time-sentiment-analysis
 
 Project set-up:
 
@@ -16,8 +16,6 @@ to uninstall a package >> run "pip uninstall <package>"
 to get the list of the packages >> run "pip list"
 
 # Current state
-
-We may not be able to gather tweets directly from XAPI (the free dv account is very limited). Maybe we can use scrapping like described in this website :https://blog.apify.com/how-to-scrape-tweets-and-more-on-twitter-59330e6fb522/
 
 DO NOT FORGET TO CITE SOURCES
 
