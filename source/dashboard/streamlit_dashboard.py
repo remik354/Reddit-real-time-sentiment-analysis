@@ -3,10 +3,11 @@ import pandas as pd
 from kafka import KafkaConsumer
 import json
 import time
+import plotly.express as px
 
 # Kafka Configuration
 KAFKA_BROKER = "localhost:9092"
-READING_TOPIC = "twitter_data"
+READING_TOPIC = "reddit_transformed"
 
 # Initialize Kafka Consumer
 consumer = KafkaConsumer(
@@ -18,77 +19,100 @@ consumer = KafkaConsumer(
 )
 
 # Streamlit Configuration
-st.set_page_config(page_title="Real-Time Tweet Sentiment Dashboard", layout="wide")
-st.title("Real-Time Tweet Sentiment Dashboard")
+st.set_page_config(page_title="Real-Time Reddit Sentiment Dashboard", layout="wide")
+st.title("Real-Time Reddit Sentiment Dashboard")
 
 # Layout
 col1, col2 = st.columns([3, 1])
 
 # Display placeholders
 with col1:
-    tweet_table_placeholder = st.empty()
-
-with col2:
+    comment_table_placeholder = st.empty()
     sentiment_chart_placeholder = st.empty()
 
+with col2:
+    topic_pie_chart_placeholder = st.empty()
+
 # Initialize data structures
-tweets_data = pd.DataFrame(columns=["Timestamp", "Username", "Content", "Sentiment"])
-sentiment_counts = {"Positive": 0, "Neutral": 0, "Negative": 0}
+# TODO: bancher à une vraie db (pour voir l'evolution)
+comments_data = pd.DataFrame(columns=["Timestamp", "Username", "Content", "Category", "Topic Title", "Sentiment Score"])
 
-
-# Helper function to update sentiment counts
-def update_sentiment_counts(sentiment):
-    if sentiment in sentiment_counts:
-        sentiment_counts[sentiment] += 1
-    else:
-        sentiment_counts[sentiment] = 1
-
-
-# Function to update the Streamlit components
+# Function to update Streamlit components
 def update_streamlit_display():
-    # Update table display (limit to 10 recent tweets)
-    with tweet_table_placeholder.container():
-        st.write("**Recent Tweets**")
-        st.table(tweets_data.tail(10))
+    # Update table display (limit to 10 recent comments)
+    with comment_table_placeholder.container():
+        st.write("**Recent Comments**")
+        st.table(comments_data.tail(10))
+    
+    # Update line chart of sentiment evolution
+    if not comments_data.empty:
+        with sentiment_chart_placeholder.container():
+            st.write("**Sentiment Evolution by Category**")
+            
+            # Convert Timestamp to datetime for proper plotting
+            comments_data["Timestamp"] = pd.to_datetime(comments_data["Timestamp"])
+            
+            # Group data by category and timestamp, then calculate the mean sentiment score
+            sentiment_avg = (
+                comments_data.groupby([pd.Grouper(key="Timestamp", freq="1min"), "Category"])
+                .agg({"Sentiment Score": "mean"})
+                .reset_index()
+            )
+            
+            # Plot the line chart using the aggregated data
+            fig = px.line(
+                sentiment_avg,
+                x="Timestamp",
+                y="Sentiment Score",
+                color="Category",
+                title="Average Sentiment Evolution Over Time by Category",
+                markers=True
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
-    # Update sentiment distribution chart
-    with sentiment_chart_placeholder.container():
-        sentiment_df = pd.DataFrame(
-            list(sentiment_counts.items()), columns=["Sentiment", "Count"]
-        )
-        st.write("**Sentiment Distribution**")
-        st.bar_chart(sentiment_df.set_index("Sentiment"))
 
+    # Update pie chart of topic proportions
+    if not comments_data.empty:
+        with topic_pie_chart_placeholder.container():
+            st.write("**Topic Category Proportions**")
+            topic_counts = comments_data["Category"].value_counts()
+            fig = px.pie(
+                names=topic_counts.index,
+                values=topic_counts.values,
+                title="Proportion of Topic Categories in Comments"
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
 # Main loop: Listen to Kafka messages and update Streamlit display
-st.write("Listening for incoming tweets...")
+st.write("Listening for incoming comments...")
 
 # Streamlit's interactive approach to prevent blocking
 for message in consumer:
-    tweet = message.value
+    comment = message.value
 
     # Extract relevant fields
-    timestamp = tweet.get("created_at")
-    username = tweet.get("author_id")  # You can replace this with the actual username if you fetch it
-    content = tweet.get("content")
-    sentiment = tweet.get("sentiment", "Neutral")  # Default to Neutral if missing
+    timestamp = comment.get("created_at")
+    username = comment.get("author")
+    content = comment.get("body")
+    topic = comment.get("topic_title")
+    category = comment.get("category")  # Topic the comment belongs to
+    sentiment = comment.get("sentiment")  # Sentiment score (positive, neutral, negative)
 
-    # Update sentiment counts and data
-    update_sentiment_counts(sentiment)
-    tweets_data = pd.concat(
-        [
-            tweets_data,
-            pd.DataFrame.from_records(
-                [
-                    {
-                        "Timestamp": timestamp,
-                        "Username": username,
-                        "Content": content,
-                        "Sentiment": sentiment,
-                    }
-                ]
-            ),
-        ]
+    # Convert sentiment to numeric score for visualization
+    sentiment_score = {"Positive": 1, "Neutral": 0, "Negative": -1}.get(sentiment, 0)
+
+    # Update data
+    new_comment = {
+        "Timestamp": timestamp,
+        "Username": username,
+        "Content": content,
+        "Category": category,
+        "Topic Title": topic,
+        "Sentiment Score": sentiment_score,
+    }
+    comments_data = pd.concat(
+        [comments_data, pd.DataFrame([new_comment])],
+        ignore_index=True
     )
 
     # Update the Streamlit display

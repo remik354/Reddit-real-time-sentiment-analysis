@@ -1,22 +1,21 @@
-# Necessary imports
+import asyncio
+import csv
 import json
 import os
-import time
-import tweepy
+
+from datetime import datetime
 from dotenv import load_dotenv
 from kafka import KafkaProducer
-import tweepy.cursor
+from random import randint
+from twikit import Client, TooManyRequests
 
 # Load environment variables with dotenv
 load_dotenv()
 
-# Load the credentials
-API_KEY = os.getenv("API_KEY")
-API_KEY_SECRET = os.getenv("API_KEY_SECRET")
-ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
-ACCESS_TOKEN_SECRET = os.getenv("ACCESS_TOKEN_SECRET")
-
-BEARER_TOKEN = os.getenv("BEARER_TOKEN")
+# import login credetials
+USERNAME = os.getenv("USERNAME")
+EMAIL = os.getenv("EMAIL")
+PASSWORD = os.getenv("PASSWORD")
 
 # Set the kafka broker
 KAFKA_BROKER = "localhost:9092"
@@ -28,56 +27,67 @@ producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
-# Setup Tweepy API
-auth = tweepy.OAuthHandler(API_KEY, API_KEY_SECRET)
-auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-api = tweepy.API(auth)
+# Definition of the query and the number of tweets to get (get rid of this later)
+MINIMUM_TWEETS = 10
+QUERY = 'Donald Trump'
 
-cursor=tweepy.Cursor(api.search_tweets, q="music", lang="en", tweet_mode="extended").items(1)
+# authenticate 
+client = Client(language='en-US')
 
-for tweet in cursor:
-    hashtags=tweet.entities['hashtags']
+async def main():
+    await client.login(
+        auth_info_1=USERNAME ,
+        auth_info_2=EMAIL,
+        password=PASSWORD
+    )
 
-    hashtext = list()
-    for j in range(0, len(hashtags)):
-        hashtext.append(hashtags[j]['text'])
+    tweets = None
+    tweet_count = 0
 
-    cur_data = {
-        "username": tweet.user.name,
-        "tweet": tweet.full_text
-    }
+    while tweet_count < MINIMUM_TWEETS:
+        try:
+            if tweets is None:
+                print(f'{datetime.now()} - Getting tweets...')
+                tweets = await client.search_tweet(QUERY, count=5, product='Top')
+            else:
+                wait_time = randint(2, 15)
+                print(f'{datetime.now()} - Waiting {wait_time} seconds before fetching more tweets...')
+                await asyncio.sleep(wait_time)
+                tweets = await tweets.next()
 
-    print(cur_data)
+        except TooManyRequests as e:
+            rate_limit_reset = datetime.fromtimestamp(e.rate_limit_reset)
+            wait_time = (rate_limit_reset - datetime.now()).total_seconds()
+            print(f'{datetime.now()} - Exception: TooManyRequests... Waiting until {rate_limit_reset} ({wait_time:.2f} seconds)')
+            await asyncio.sleep(wait_time)
+            continue
 
+        if not tweets:
+            print(f'{datetime.now()} -No more tweets to scrap')
+            break
 
+        for tweet in tweets:
+            tweet_count += 1
+            tweet_data = {"tweet_count": tweet_count, 
+                          "username": tweet.user.name, 
+                          "created_at": tweet.created_at, 
+                          "retweet_count": tweet.retweet_count, 
+                          "likes": tweet.retweet_count , 
+                          "content": tweet.text
+            }
 
+            with open('tweets.csv', 'a', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(tweet_data)
+            producer.send(PRODUCER_TOPIC, value=tweet_data)
+            
+        print(f'{datetime.now()} -Got {tweet_count} tweets')
 
-# class StreamListener(tweepy.StreamingClient):
-#     def on_tweet(self, tweet):
-#         try:
-#             tweet_data = {
-#                 'user': tweet.author_id,
-#                 'created_at': tweet.created_at.isoformat() if tweet.created_at else None,
-#                 'text': tweet.text,
-#             }
-#             producer.send(PRODUCER_TOPIC, value=tweet_data)
-#             print(f"Tweet sent to Kafka: {tweet_data['text']}")
-#         except Exception as e:
-#             print(f"Error processing tweet: {e}")
+    print(f'{datetime.now()} -Done ! Got {tweet_count} tweets')
 
-#     def on_error(self, status_code):
-#         if status_code == 420:
-#             return False
-#         print(f"Error: {status_code}")
+# create a csv:
+with open('tweets.csv', 'w', newline='') as file:
+    writer = csv.writer(file)
+    writer.writerow(['No.', 'Username', 'Created At', 'Retweets', 'Likes', 'Text'])
 
-
-# if __name__ == "__main__":
-#     stream_listener = StreamListener(BEARER_TOKEN)
-#     try:
-#         stream_listener.sample()
-        
-#     except KeyboardInterrupt:
-#         print("Streaming stopped.")
-
-# # Stream encountered HTTP error: 403
-# # HTTP error response text: {"client_id":"29825133","detail":"When authenticating requests to the Twitter API v2 endpoints, you must use keys and tokens from a Twitter developer App that is attached to a Project. You can create a project via the developer portal.","registration_url":"https://developer.twitter.com/en/docs/projects/overview","title":"Client Forbidden","required_enrollment":"Appropriate Level of API Access","reason":"client-not-enrolled","type":"https://api.twitter.com/2/problems/client-forbidden"}
+asyncio.run(main())
