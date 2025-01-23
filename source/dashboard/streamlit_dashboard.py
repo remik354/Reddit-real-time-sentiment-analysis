@@ -30,9 +30,9 @@ col3, col4 = st.columns([3, 1])
 # Display placeholders
 with col1:
     # Add the subreddit filter above the comments table
-    st.write("### Filter by Subreddit")
+    st.write("### Filter by Keyword")
     subreddit_filter = st.text_input(
-        "Enter subreddit to filter (leave blank for all):", ""
+        "Enter a key word to filter (leave blank for all):", ""
     )
     comment_table_placeholder = st.empty()
 
@@ -47,33 +47,26 @@ comments_data = pd.DataFrame(columns=["Timestamp", "Username", "Content", "Categ
 
 # Function to update Streamlit components
 def update_streamlit_display(comments_data):
-    # Apply content filter
+    # Filtrer les commentaires selon le filtre subreddit
     if subreddit_filter:
         filtered_data = comments_data[comments_data["Content"].str.contains(subreddit_filter, case=False, na=False)]
     else:
         filtered_data = comments_data
 
-    # Update table display (limit to 10 recent comments)
+    # Mettre à jour l'affichage du tableau des commentaires
     with comment_table_placeholder.container():
         st.write("**Recent Comments**")
         st.dataframe(filtered_data.tail(5), use_container_width=True)
 
-    # Update line chart of sentiment evolution
+    # Mettre à jour le graphique des sentiments
     if not filtered_data.empty:
         with sentiment_chart_placeholder.container():
-            st.write("**Sentiment Evolution by Category**")
-            
-            # Convert Timestamp to datetime for proper plotting
             filtered_data["Timestamp"] = pd.to_datetime(filtered_data["Timestamp"])
-            
-            # Group data by category and timestamp, then calculate the mean sentiment score
             sentiment_avg = (
                 filtered_data.groupby([pd.Grouper(key="Timestamp", freq="1s"), "Category"])
                 .agg({"Sentiment Score": "mean"})
                 .reset_index()
             )
-            
-            # Plot the line chart using the aggregated data
             fig = px.line(
                 sentiment_avg,
                 x="Timestamp",
@@ -82,22 +75,19 @@ def update_streamlit_display(comments_data):
                 title="Average Sentiment Evolution Over Time by Category",
                 markers=True
             )
-            # Pass a unique key to avoid duplicate element IDs
-            st.plotly_chart(fig, use_container_width=True, key="sentiment_chart")
+            try:
+                st.plotly_chart(fig, use_container_width=True)
+            except:
+                pass
 
-    # Update bar chart for sentiment distribution by category
+    # Mettre à jour le graphique en barres
     if not filtered_data.empty:
         with bar_chart_placeholder.container():
-            st.write("**Average Sentiment Score by Category**")
-            
-            # Calculate the average sentiment for each category
             sentiment_dist = (
                 filtered_data.groupby("Category")
                 .agg({"Sentiment Score": "mean"})
                 .reset_index()
             )
-            
-            # Plot the bar chart using Plotly Express
             fig = px.bar(
                 sentiment_dist,
                 x="Category",
@@ -105,8 +95,10 @@ def update_streamlit_display(comments_data):
                 title="Average Sentiment Score by Category",
                 labels={"Sentiment Score": "Average Sentiment"}
             )
-            # Pass a unique key to avoid duplicate element IDs
-            st.plotly_chart(fig, use_container_width=True, key="bar_chart")
+            try:
+                st.plotly_chart(fig, use_container_width=True)
+            except:
+                pass
 
 
 # Function to read the latest data from archives.txt

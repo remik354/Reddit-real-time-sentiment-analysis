@@ -18,7 +18,7 @@ else:
 # Define the functions to run each module
 def run_reddit_scraper():
     """Run the Reddit scraper to fetch comments and send them to the Kafka topic."""
-    os.system("python3 source/kafka/reddit_scaper.py")
+    os.system("python3 source/kafka/reddit_scraper.py")
 
 def run_reddit_transform_scratch():
     """Run the transformation process to analyze and classify comments."""
