@@ -103,6 +103,11 @@ To run the main script, follow these steps:
    streamlit run source/dashboard/streamlit_dashboard.py
    ```  
 
+4. In case of an error caused by a package not found:
+   ```bash
+   export PYTHONPATH=$(pwd)
+   ```  
+
 💡 **Tip**: Wait a few seconds before starting the Streamlit dashboard to allow for better visualizations with more data.  
 
 ---
